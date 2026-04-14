@@ -12,7 +12,7 @@ Stepper stepper(STEPS_PER_REV, 3, 5, 4, 6);       // Initialisiert den Stepper m
 // LCD-Bildschirm
 LiquidCrystal_I2C lcd(0x27, 16, 2);               // LCD-Adresse (0x27), 16 Zeichen, 2 Zeilen
 unsigned long lastLCDUpdate = 0;                  // Zeitpunkt der letzten LCD-Aktualisierung
-const unsigned long LCD_UPDATE_INTERVAL = 2000;   // LCD-Update alle 2 Sekunden
+const unsigned long LCD_UPDATE_INTERVAL = 500;    // LCD-Update Intervall in ms
 
 // Temperatur-Sensor (TMP36)
 //const int tempPin = A0;                 // Temperatur-Sensor am analogen Pin A0
@@ -23,19 +23,19 @@ OneWire oneWire(TEMP_PIN);              // Erstellt OneWire-Verbindung auf Pin D
 DallasTemperature sensors(&oneWire);    // Übergibt OneWire an DallasTemperature Bibliothek
 
 // Temperatur-Werte
-#define TEMP_VALUES 4                  // Anzahl der letzten berücksichtigten Temperaturwerte
+#define TEMP_VALUES 5                   // Anzahl der letzten berücksichtigten Temperaturwerte
 float tempReadings[TEMP_VALUES];        // Array für die letzten Temperaturwerte
 int readingIndex = 0;                   // Aktuelle Position im Array
 int readingCount = 0;                   // Anzahl der gespeicherten Werte
 
 // Fenster
 float openTemp = 30.0;          // Temperatur, ab der das Fenster geöffnet wird
-float closeTemp = 28.5;         // Temperatur, ab der das Fenster geschlossen wird
+float closeTemp = 29.0;         // Temperatur, ab der das Fenster geschlossen wird
 bool windowOpen = false;        // Status des Fensters (offen/geschlossen)
  
 // Konsolen-Logging
 unsigned long lastLogTime = 0;              // Zeitpunkt der letzten Datenaufzeichnung
-const unsigned long LOG_INTERVAL = 1000;    // Logging-Intervall in ms
+const unsigned long LOG_INTERVAL = 1000;    // Logging-Intervall für die Konsole in ms
 
  
 void setup() {
@@ -52,7 +52,7 @@ void setup() {
   lcd.backlight();                  // Schaltet die Hintergrundbeleuchtung ein
   lcd.setCursor(0,0);               // Setzt Cursor auf erste Zeile
   lcd.print("System Start...");     // Startmeldung anzeigen
-  delay(1000);                      // 2 Sekunden warten
+  delay(2000);                      // Anzeigen abwarten
 
   // Temperatur-Sensor initialisieren (DS18B20)
   sensors.begin();
@@ -63,7 +63,7 @@ void setup() {
   for (int i = 0; i < TEMP_VALUES; i++) {
     temperature = measureTemperature();
     avgTemperature = calculateAverageTemperature();
-    delay(1000 / TEMP_VALUES);                      // wait 1 second
+    delay(1000 / TEMP_VALUES);                      // 1 Sekunde warten
   }
   logTemperature(temperature, avgTemperature);
 }
@@ -78,21 +78,7 @@ void loop() {
   // Bildschirm aktualisieren
   unsigned long currentTime = millis();                         // Aktuelle Laufzeit seit Start
   if (currentTime - lastLCDUpdate >= LCD_UPDATE_INTERVAL) {     // Prüft, ob LCD aktualisiert werden soll
-
-    lcd.setCursor(0,0);
-    lcd.print("T:");
-    lcd.print(avgTemperature, 1);                               // Zeigt Durchschnittstemperatur mit 1 Nachkommastelle
-    lcd.print("C O:");
-    lcd.print(openTemp, 0);                                     // Zeigt Öffnungs-Temperatur
-    lcd.print("C  ");
- 
-    lcd.setCursor(0,1);
-    if (windowOpen) {
-      lcd.print("Window: OPEN    ");                            // Anzeige wenn offen
-    } else {
-      lcd.print("Window: CLOSED  ");                            // Anzeige wenn geschlossen
-    }
- 
+    updateScreen(avgTemperature);
     lastLCDUpdate = currentTime;                                // Aktualisierungszeit merken
   }
  
@@ -107,7 +93,7 @@ void loop() {
     windowOpen = false;// Status setzen
   }
  
-  delay(1000); // 1 Sekunde Pause (Loop-Zyklus)
+  delay(250); // Pause (Loop-Zyklus)
 }
 
 float measureTemperature() {
@@ -123,7 +109,7 @@ float measureTemperature() {
 
   // Temperatur speichern im Ringspeicher
   tempReadings[readingIndex] = temperature;                 // Speichert aktuellen Wert im Array
-  readingIndex = (readingIndex + 1) % TEMP_VALUES;                   // Nächste Position (Ringpuffer)
+  readingIndex = (readingIndex + 1) % TEMP_VALUES;          // Nächste Position (Ringpuffer)
   if (readingCount < TEMP_VALUES) {
     readingCount++;                                         // Erhöht Anzahl der gültigen Werte (max. TEMP_VALUES)
   }
@@ -131,13 +117,13 @@ float measureTemperature() {
   return temperature;
 }
 
+// Temperatur-Durchschnitt bilden auf Basis der letzten Werte
 float calculateAverageTemperature() {
-  // Temperatur-Durchschnitt bilden auf Basis der letzten Werte
   float sum = 0;
   for (int i = 0; i < readingCount; i++) {
-    sum += tempReadings[i]; // Summiert alle gespeicherten Werte
+    sum += tempReadings[i];                       // Summiert alle gespeicherten Werte
   }
-  float avgTemperature = sum / readingCount; // Berechnet Durchschnitt
+  float avgTemperature = sum / readingCount;      // Berechnet Durchschnitt
 
   return avgTemperature;
 }
@@ -145,39 +131,56 @@ float calculateAverageTemperature() {
 void logTemperature(float temperature, float avgTemperature) {
   
   // Temperatur auf Konsole ausgeben
-  unsigned long currentTime = millis(); // aktuelle Zeit
-  if (currentTime - lastLogTime >= LOG_INTERVAL) { // Prüft Logging-Intervall
-    Serial.print(currentTime / 1000);  // Zeit seit Start
+  unsigned long currentTime = millis();                 // aktuelle Zeit
+  if (currentTime - lastLogTime >= LOG_INTERVAL) {      // Prüft Logging-Intervall
+    Serial.print(currentTime / 1000);                   // Zeit seit Start
     Serial.print("\t\t");
-    Serial.print(temperature, 1);      // Temperatur
+    Serial.print(temperature, 1);                       // Temperatur
     Serial.print("\t\t");
-    Serial.print(avgTemperature, 1);      // Temperatur
+    Serial.print(avgTemperature, 1);                    // Temperatur
     Serial.print("\t\t");
-    Serial.print(windowOpen ? "OPEN" : "CLOSED"); // Fensterstatus
+    Serial.print(windowOpen ? "OPEN" : "CLOSED");       // Fensterstatus
     Serial.print("\t\t");
-    Serial.print(openTemp);     // Öffnungsschwelle
+    Serial.print(openTemp);                             // Öffnungsschwelle
     Serial.print("\t\t");
-    Serial.println(closeTemp);  // Schließschwelle
-    lastLogTime = currentTime;  // Zeit speichern
+    Serial.println(closeTemp);                          // Schließschwelle
+    lastLogTime = currentTime;                          // Zeit speichern
+  }
+}
+
+// den Bildschirm aktualisieren
+void updateScreen(float avgTemperature) {
+  lcd.setCursor(0,0);
+  lcd.print("T:");
+  lcd.print(avgTemperature, 1);                 // Zeigt Durchschnittstemperatur mit 1 Nachkommastelle
+  lcd.print("C O:");
+  lcd.print(openTemp, 0);                       // Zeigt Öffnungs-Temperatur
+  lcd.print("C  ");
+
+  lcd.setCursor(0,1);
+  if (windowOpen) {
+    lcd.print("Window: OPEN    ");              // Anzeige wenn offen
+  } else {
+    lcd.print("Window: CLOSED  ");              // Anzeige wenn geschlossen
   }
 }
  
 void openWindow() {
   lcd.setCursor(0,1);
-  lcd.print("Opening...     "); // Anzeige beim Öffnen
+  lcd.print("Opening...     ");             // Anzeige beim Öffnen
   Serial.println("Opening...");
-  stepper.step(512);           // Motor dreht vorwärts (halbe Umdrehung)
+  stepper.step(512);                        // Motor dreht vorwärts (halbe Umdrehung)
 }
  
 void closeWindow() {
   lcd.setCursor(0,1);
-  lcd.print("Closing...     "); // Anzeige beim Schließen
+  lcd.print("Closing...     ");             // Anzeige beim Schließen
   Serial.println("Closing...");
-  stepper.step(-512);          // Motor dreht rückwärts
+  stepper.step(-512);                       // Motor dreht rückwärts
 }
 
 void shutdownRoutine() {
-  closeWindow();       // Motor ansteuern
-  lcd.clear();         // Display aus
+  closeWindow();                            // Motor ansteuern
+  lcd.clear();                              // Display aus
   Serial.println("System safe shutdown");
 }
