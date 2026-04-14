@@ -2,6 +2,8 @@
 #include <LiquidCrystal_I2C.h>    // LCD mit I2C-Modul
 #include <Stepper.h>              // Schrittmotor
 #include <SoftwareSerial.h>       // serielle Kommunikation
+#include <OneWire.h>              // Digitale Kommunikation
+#include <DallasTemperature.h>    // Digitaler Temperatur-Sensor
 
 // Schrittmotor (Modell 28BYJ-48)
 #define STEPS_PER_REV 2048                        // Schritte pro Umdrehung (28BYJ-48)
@@ -13,14 +15,22 @@ unsigned long lastLCDUpdate = 0;                  // Zeitpunkt der letzten LCD-A
 const unsigned long LCD_UPDATE_INTERVAL = 2000;   // LCD-Update alle 2 Sekunden
 
 // Temperatur-Sensor (TMP36)
-const int tempPin = A0;         // Temperatur-Sensor am analogen Pin A0
-float tempReadings[10];         // Array für die letzten 10 Temperaturwerte
-int readingIndex = 0;           // Aktuelle Position im Array
-int readingCount = 0;           // Anzahl der gespeicherten Werte
+//const int tempPin = A0;                 // Temperatur-Sensor am analogen Pin A0
+
+// Temperatur-Sensor (DS18B20)
+#define TEMP_PIN 2                      // Temperatur-Sensor am digiralen Pin 0
+OneWire oneWire(TEMP_PIN);              // Erstellt OneWire-Verbindung auf Pin D2
+DallasTemperature sensors(&oneWire);    // Übergibt OneWire an DallasTemperature Bibliothek
+
+// Temperatur-Werte
+#define TEMP_VALUES 4                  // Anzahl der letzten berücksichtigten Temperaturwerte
+float tempReadings[TEMP_VALUES];        // Array für die letzten Temperaturwerte
+int readingIndex = 0;                   // Aktuelle Position im Array
+int readingCount = 0;                   // Anzahl der gespeicherten Werte
 
 // Fenster
 float openTemp = 30.0;          // Temperatur, ab der das Fenster geöffnet wird
-float closeTemp = 28.0;         // Temperatur, ab der das Fenster geschlossen wird
+float closeTemp = 28.5;         // Temperatur, ab der das Fenster geschlossen wird
 bool windowOpen = false;        // Status des Fensters (offen/geschlossen)
  
 // Konsolen-Logging
@@ -44,13 +54,16 @@ void setup() {
   lcd.print("System Start...");     // Startmeldung anzeigen
   delay(1000);                      // 2 Sekunden warten
 
+  // Temperatur-Sensor initialisieren (DS18B20)
+  sensors.begin();
+
+  // zuverlässige Start-Temperatur bilden
   float temperature = 0;
   float avgTemperature = 0;
-  // zuverlässige Start-Temperatur bilden
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < TEMP_VALUES; i++) {
     temperature = measureTemperature();
     avgTemperature = calculateAverageTemperature();
-    delay(100);
+    delay(1000 / TEMP_VALUES);                      // wait 1 second
   }
   logTemperature(temperature, avgTemperature);
 }
@@ -99,25 +112,27 @@ void loop() {
 
 float measureTemperature() {
 
-  // Temperatur messen
-  float voltage = analogRead(tempPin) * (5.0 / 1023.0);     // Wandelt ADC-Wert in Spannung um (ADC = Analog-Digital-Converter)
-  //float voltage = analogRead(tempPin) * (3.3 / 1023.0);   //falls an 3.3V angeschlossen
-  float temperature = (voltage - 0.5) * 100.0;              // Umrechnung Spannung → Temperatur
-  //float sensorValue = analogRead(tempPin);
-  //int temperature = map (sensorValue, 0, 410, -50, 150);  // Handbuch, allerdings nur ganzzahlig
+  // Temperatur messen (analog)
+  //float voltage = analogRead(tempPin) * (5.0 / 1023.0);     // Wandelt ADC-Wert in Spannung um (ADC = Analog-Digital-Converter)
+  //float voltage = analogRead(tempPin) * (3.3 / 1023.0);     //falls an 3.3V angeschlossen
+  //float temperature = (voltage - 0.5) * 100.0;              // Umrechnung Spannung → Temperatur
+
+  // Temperatur messen (digital)
+  sensors.requestTemperatures();                            // Startet eine neue Temperaturmessung
+  float temperature = sensors.getTempCByIndex(0);           // Liest Temperatur vom ersten Sensor (Index 0)
 
   // Temperatur speichern im Ringspeicher
   tempReadings[readingIndex] = temperature;                 // Speichert aktuellen Wert im Array
-  readingIndex = (readingIndex + 1) % 10;                   // Nächste Position (Ringpuffer)
-  if (readingCount < 10) {
-    readingCount++;                                         // Erhöht Anzahl der gültigen Werte (max. 10)
+  readingIndex = (readingIndex + 1) % TEMP_VALUES;                   // Nächste Position (Ringpuffer)
+  if (readingCount < TEMP_VALUES) {
+    readingCount++;                                         // Erhöht Anzahl der gültigen Werte (max. TEMP_VALUES)
   }
 
   return temperature;
 }
 
 float calculateAverageTemperature() {
-  // Temperatur-Durchschnitt bilden auf Basis der letzten 10 Werte
+  // Temperatur-Durchschnitt bilden auf Basis der letzten Werte
   float sum = 0;
   for (int i = 0; i < readingCount; i++) {
     sum += tempReadings[i]; // Summiert alle gespeicherten Werte
