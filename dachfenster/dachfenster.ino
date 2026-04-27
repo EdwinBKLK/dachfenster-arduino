@@ -28,9 +28,12 @@ float tempReadings[TEMP_VALUES];        // Array für die letzten Temperaturwert
 int readingIndex = 0;                   // Aktuelle Position im Array
 int readingCount = 0;                   // Anzahl der gespeicherten Werte
 
+// Potentiometer
+#define POT_PIN A0              // Potentiometer Pin
+
 // Fenster
-float openTemp = 30.0;          // Temperatur, ab der das Fenster geöffnet wird
-float closeTemp = 29.0;         // Temperatur, ab der das Fenster geschlossen wird
+float openTemp = 50.0;          // Temperatur, ab der das Fenster geöffnet wird
+float closeTemp = openTemp - 1.0;         // Temperatur, ab der das Fenster geschlossen wird
 bool windowOpen = false;        // Status des Fensters (offen/geschlossen)
  
 // Konsolen-Logging
@@ -69,6 +72,9 @@ void setup() {
 }
  
 void loop() {
+
+  // Schwellwerte entsprechend des Potentiometers einstellen 
+  setThresholds();
   
   // Temperatur messen und auf der Konsole ausgeben
   float temperature = measureTemperature();
@@ -94,6 +100,15 @@ void loop() {
   }
  
   delay(250); // Pause (Loop-Zyklus)
+}
+
+void setThresholds() {
+  int potValue = analogRead(POT_PIN); // Analoger Signalwert des Potentiometers (0-1023)
+  Serial.println(potValue);           // Gelesenen Potentiometer-Wert ausgeben
+
+  // Bereich 0-50 Grad: Durch 20.5 teilen (1023/50) und runden auf 0.5er Schritte
+  openTemp = round(((float)potValue / 20.5) * 2.0) / 2.0;
+  closeTemp = openTemp - 1.0;
 }
 
 float measureTemperature() {
@@ -154,7 +169,7 @@ void updateScreen(float avgTemperature) {
   lcd.print("T:");
   lcd.print(avgTemperature, 1);                 // Zeigt Durchschnittstemperatur mit 1 Nachkommastelle
   lcd.print("C O:");
-  lcd.print(openTemp, 0);                       // Zeigt Öffnungs-Temperatur
+  lcd.print(openTemp, 1);                       // Zeigt Öffnungs-Temperatur
   lcd.print("C  ");
 
   lcd.setCursor(0,1);
